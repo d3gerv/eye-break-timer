@@ -75,7 +75,7 @@ input[type=checkbox]{width:1.2rem;height:1.2rem;accent-color:var(--work)}
 
   <div class="card">
     <div class="row"><span>Breaks taken today</span><span class="stat" id="count">0</span></div>
-    <div class="row"><label for="sound">Play a soft chime</label><input type="checkbox" id="sound" checked></div>
+    <div class="row"><label for="sound">Play an alert tone</label><input type="checkbox" id="sound" checked></div>
     <div class="row"><label for="notif">Show desktop notification</label><input type="checkbox" id="notif"></div>
   </div>
 
@@ -122,13 +122,15 @@ input[type=checkbox]{width:1.2rem;height:1.2rem;accent-color:var(--work)}
     if (!$("sound").checked) return;
     try {
       ctx = ctx || new (window.AudioContext || window.webkitAudioContext)();
-      [660, 880].forEach(function(f, i){
-        var o = ctx.createOscillator(), g = ctx.createGain(), t = ctx.currentTime + i*0.25;
-        o.frequency.value = f; o.connect(g); g.connect(ctx.destination);
-        g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.15, t+0.03);
-        g.gain.exponentialRampToValueAtTime(0.0001, t+0.5);
-        o.start(t); o.stop(t+0.55);
+            if (ctx.state === "suspended") ctx.resume();
+      [880, 1175, 880, 1175, 880, 1175].forEach(function(f, i){
+        var o = ctx.createOscillator(), g = ctx.createGain(), t = ctx.currentTime + i*0.24;
+        o.type = "triangle"; o.frequency.value = f; o.connect(g); g.connect(ctx.destination);
+        g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.6, t+0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, t+0.22);
+        o.start(t); o.stop(t+0.25);
       });
+      if (navigator.vibrate) navigator.vibrate([200,100,200,100,200]);
     } catch(e){}
   }
   function notify(title, body){
@@ -154,6 +156,7 @@ input[type=checkbox]{width:1.2rem;height:1.2rem;accent-color:var(--work)}
     render();
   }
   function start(){
+        try { ctx = ctx || new (window.AudioContext || window.webkitAudioContext)(); ctx.resume(); } catch(e){}
     running = true; endAt = Date.now() + left*1000;
     tick = setInterval(loop, 250); render();
   }
