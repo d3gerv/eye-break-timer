@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>20-20-20 Eye Break Timer</title>
+<style>
+:root{
+  --bg:#E6F0EF; --surface:#F6FAF9; --ink:#12303A; --muted:#4F6B73;
+  --work:#1F5F7A; --rest:#3E9B6B; --track:#C9DDDC; --btn-text:#F6FAF9;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0E1C22; --surface:#15272F; --ink:#E3EFEE; --muted:#93AEB4;
+    --work:#5BB4D6; --rest:#6FCB97; --track:#244049; --btn-text:#0E1C22; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0E1C22; --surface:#15272F; --ink:#E3EFEE; --muted:#93AEB4;
+  --work:#5BB4D6; --rest:#6FCB97; --track:#244049; --btn-text:#0E1C22; color-scheme:dark;
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Atkinson Hyperlegible","Segoe UI",system-ui,sans-serif;min-height:100vh;display:flex;justify-content:center}
+main{width:100%;max-width:30rem;padding:2rem 1.25rem 3rem;text-align:center}
+h1{font-size:1.5rem;font-weight:700;margin:0 0 .25rem}
+.sub{color:var(--muted);margin:0 auto 1.75rem;max-width:26rem;line-height:1.5}
+.dial{position:relative;width:min(80vw,20rem);aspect-ratio:1;margin:0 auto 1.5rem}
+.dial svg{width:100%;height:100%;transform:rotate(-90deg)}
+.track{fill:none;stroke:var(--track);stroke-width:10}
+.prog{fill:none;stroke:var(--work);stroke-width:10;stroke-linecap:round;transition:stroke .4s}
+.rest .prog{stroke:var(--rest)}
+.center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.25rem}
+.time{font-size:3.5rem;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.state{color:var(--muted);font-size:1.05rem;max-width:11rem;line-height:1.35}
+.rest .state{color:var(--rest);font-weight:700}
+.btns{display:flex;gap:.75rem;justify-content:center;flex-wrap:wrap;margin-bottom:1.5rem}
+button{font:inherit;font-weight:700;border:2px solid var(--work);border-radius:999px;padding:.75rem 1.6rem;cursor:pointer;background:var(--work);color:var(--btn-text);min-width:7rem}
+button.ghost{background:transparent;color:var(--ink);border-color:var(--track)}
+button:focus-visible,input:focus-visible{outline:3px solid var(--ink);outline-offset:3px}
+.card{background:var(--surface);border-radius:1rem;padding:1rem 1.25rem;text-align:left;margin-bottom:1rem}
+.card h2{font-size:1rem;margin:0 0 .5rem}
+.card p,.card li{color:var(--muted);line-height:1.5;margin:.25rem 0}
+.card ul{padding-left:1.1rem;margin:0}
+.row{display:flex;justify-content:space-between;align-items:center;gap:1rem;padding:.35rem 0}
+.row label{color:var(--ink)}
+input[type=checkbox]{width:1.2rem;height:1.2rem;accent-color:var(--work)}
+.stat{font-size:1.1rem;color:var(--ink);font-weight:700}
+@media (prefers-reduced-motion:reduce){.prog{transition:none}}
+</style>
+</head>
+<body>
+<main>
+  <h1>20-20-20 eye break</h1>
+  <p class="sub">Every 20 minutes, look at something 20 feet (6 meters) away for 20 seconds. This timer reminds you.</p>
+
+  <div class="dial" id="dial">
+    <svg viewBox="0 0 120 120" aria-hidden="true">
+      <circle class="track" cx="60" cy="60" r="54"/>
+      <circle class="prog" id="prog" cx="60" cy="60" r="54"/>
+    </svg>
+    <div class="center">
+      <div class="time" id="time" role="timer" aria-live="off">20:00</div>
+      <div class="state" id="state">Ready when you are</div>
+    </div>
+  </div>
+
+  <div class="btns">
+    <button id="start">Start</button>
+    <button id="reset" class="ghost">Reset</button>
+  </div>
+
+  <div class="card">
+    <div class="row"><span>Breaks taken today</span><span class="stat" id="count">0</span></div>
+    <div class="row"><label for="sound">Play a soft chime</label><input type="checkbox" id="sound" checked></div>
+    <div class="row"><label for="notif">Show desktop notification</label><input type="checkbox" id="notif"></div>
+  </div>
+
+  <div class="card">
+    <h2>During your 20 seconds</h2>
+    <ul>
+      <li>Look out a window or across the room at something far away.</li>
+      <li>Blink slowly a few times to re-wet your eyes.</li>
+      <li>Keep this tab open so the timer keeps running.</li>
+    </ul>
+  </div>
+</main>
+
+<script>
+(function(){
+  var WORK = 20*60, REST = 20, C = 2*Math.PI*54;
+  var phase = "work", left = WORK, running = false, endAt = 0, tick = null, count = 0;
+  var $ = function(id){return document.getElementById(id)};
+  var prog = $("prog"), timeEl = $("time"), stateEl = $("state"), dial = $("dial"), startBtn = $("start");
+  prog.style.strokeDasharray = C;
+
+  function today(){ return new Date().toISOString().slice(0,10); }
+  try {
+    var saved = JSON.parse(localStorage.getItem("eyebreaks") || "null");
+    if (saved && saved.day === today()) count = saved.count;
+  } catch(e){}
+  $("count").textContent = count;
+  function saveCount(){ try { localStorage.setItem("eyebreaks", JSON.stringify({day:today(), count:count})); } catch(e){} }
+
+  function fmt(s){ var m = Math.floor(s/60), r = s%60; return (m<10?"0":"")+m+":"+(r<10?"0":"")+r; }
+  function render(){
+    var total = phase === "work" ? WORK : REST;
+    timeEl.textContent = fmt(Math.max(0, Math.ceil(left)));
+    prog.style.strokeDashoffset = C * (1 - left/total);
+    dial.className = "dial" + (phase === "rest" ? " rest" : "");
+    if (phase === "rest") stateEl.textContent = "Look 20 feet away";
+    else stateEl.textContent = running ? "Focus time" : (left === WORK ? "Ready when you are" : "Paused");
+    document.title = (running ? fmt(Math.ceil(left)) + " · " : "") + "Eye Break Timer";
+    startBtn.textContent = running ? "Pause" : (left === WORK && phase === "work" ? "Start" : "Resume");
+  }
+
+  var ctx = null;
+  function chime(){
+    if (!$("sound").checked) return;
+    try {
+      ctx = ctx || new (window.AudioContext || window.webkitAudioContext)();
+      [660, 880].forEach(function(f, i){
+        var o = ctx.createOscillator(), g = ctx.createGain(), t = ctx.currentTime + i*0.25;
+        o.frequency.value = f; o.connect(g); g.connect(ctx.destination);
+        g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.15, t+0.03);
+        g.gain.exponentialRampToValueAtTime(0.0001, t+0.5);
+        o.start(t); o.stop(t+0.55);
+      });
+    } catch(e){}
+  }
+  function notify(title, body){
+    if ($("notif").checked && "Notification" in window && Notification.permission === "granted") {
+      try { new Notification(title, {body: body}); } catch(e){}
+    }
+  }
+
+  function switchPhase(){
+    if (phase === "work") {
+      phase = "rest"; left = REST;
+      chime(); notify("Time for an eye break", "Look at something 20 feet away for 20 seconds.");
+    } else {
+      phase = "work"; left = WORK; count++; $("count").textContent = count; saveCount();
+      chime(); notify("Break complete", "Back to work. Next break in 20 minutes.");
+    }
+    endAt = Date.now() + left*1000;
+  }
+
+  function loop(){
+    left = (endAt - Date.now())/1000;
+    if (left <= 0) switchPhase();
+    render();
+  }
+  function start(){
+    running = true; endAt = Date.now() + left*1000;
+    tick = setInterval(loop, 250); render();
+  }
+  function pause(){ running = false; clearInterval(tick); render(); }
+
+  startBtn.addEventListener("click", function(){ running ? pause() : start(); });
+  $("reset").addEventListener("click", function(){
+    pause(); phase = "work"; left = WORK; render();
+  });
+  $("notif").addEventListener("change", function(e){
+    if (e.target.checked && "Notification" in window && Notification.permission !== "granted") {
+      Notification.requestPermission().then(function(p){ if (p !== "granted") e.target.checked = false; });
+    } else if (e.target.checked && !("Notification" in window)) { e.target.checked = false; }
+  });
+  render();
+})();
+</script>
+</body>
+</html>
